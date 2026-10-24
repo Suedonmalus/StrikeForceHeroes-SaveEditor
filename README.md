@@ -6,7 +6,7 @@
 
 ---
 
-## ⬇️ 直接下载（不需要会用 GitHub）
+## ⬇️ 直接下载
 
 **👉 [点这里下载 SFHTrainer.exe](https://github.com/Suedonmalus/StrikeForceHeroes-SaveEditor/raw/main/dist/SFHTrainer.exe)**
 
