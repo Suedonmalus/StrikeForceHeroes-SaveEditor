@@ -1,0 +1,10 @@
+# 构建产物（不提交）
+bin/
+obj/
+gui/publish/
+
+# 本地快捷方式 / 系统文件
+*.lnk
+Thumbs.db
+Desktop.ini
+.DS_Store
