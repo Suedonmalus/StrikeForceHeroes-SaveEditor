@@ -26,6 +26,8 @@ GUI 作者按此实现即可，不需要了解 IL2CPP 内部结构。
 | `SETCAMO <itemId> <camoIndex>` | 设置武器皮肤；`-1` 表示无皮肤 |
 | `SAVE` | 调用游戏 `SD.Save()` 落盘 |
 | `REFRESH` | 尝试让界面刷新（当前实现：空操作，返回 OK） |
+| `DUMPCLASS <类名>` | 诊断：列出 `Assembly-CSharp.dll` 里某个类的全部字段名与偏移（`FIELD <name> <offset>`） |
+| `DUMPWD <itemId>` | 诊断：列出该物品 `WeaponData` 每个字段的 int / float / 指针值 |
 | `QUIT` | 停止代理线程（DLL 保持加载，不卸载） |
 
 - `slot`：0..3。
@@ -72,7 +74,10 @@ END
 - `ITEM.type` 为 `EItemType` 枚举值（见下）；`-1` 表示该物品没有武器数据。
 - `ITEM.camoIndex` 是当前皮肤在 `CAMO` 目录里的序号；`-1` 表示无皮肤。
 - `CAMO` 包含游戏内全部迷彩（含角色 / 工坊皮肤）：游戏本身允许把角色迷彩套在武器上（例如十字弩的「劫掠者」就是 Niz Medic 4）。
-- `SETCAMO` / `SETMOD` 写入后，代理会调用游戏的 `ApplyModsLevelCamo` 把皮肤和词条真正套到武器数据上。
+- `SETRARITY` / `SETCAMO` / `SETMOD` **只写物品自身字段**（`SItemInfo.Rarity` / `WeaponCamo` / `WeaponMods`），
+  不写 `WeaponData.Rarity`、`WeaponData.Camo`。后者是所有同型号武器共享的模板字段，
+  而 `WeaponData.GetLocalizedName()` 会读 `Rarity`——写下去会让武器名字被换成别的（例如 `.50 M107` → `坦克毁灭者`）。
+- 修改后必须 `SAVE`，皮肤与稀有度在游戏重新加载存档后按新的物品字段生效。
 - `equippedMask` 位含义：1=当前职业主武器，2=副武器，4=装备/护甲。
 - 数值字段全部为十进制整数/浮点文本；`value` 为物品价值（float，保留 2 位）。
 

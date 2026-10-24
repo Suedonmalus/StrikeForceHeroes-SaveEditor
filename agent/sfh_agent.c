@@ -25,6 +25,7 @@ static HMODULE g_ga;
 static Il2CppDomain* g_dom;
 static volatile int g_running = 1;
 
+
 // ---- il2cpp exports ----
 #define FN(ret, name, args) typedef ret (*fn_##name) args; static fn_##name p_##name;
 FN(Il2CppDomain*, domain_get, (void))
@@ -148,7 +149,6 @@ static char** g_locVals;
 static int g_locCount;
 static const MethodInfo* mLocalizedName;
 static const MethodInfo* mApplyCamo;
-static void apply_weapon_data(char* val, void* wd);
 
 static char* dup_str(const char* s) {
     size_t n = strlen(s) + 1;
@@ -599,21 +599,6 @@ static char* find_item_val(void* items, uint32_t id, int* outCount, int* outEsz)
     return NULL;
 }
 
-static void apply_weapon_data(char* val, void* wd) {
-    if (!mApplyCamo || !wd) return;
-    void* mods = *(void**)(val + 48);
-    int level = *(int*)(val + 36);
-    void* camo = *(void**)(val + 56);
-    void* args[3];
-    void* modsRef = mods;
-    int lvl = level;
-    void* camoRef = camo;
-    args[0] = &modsRef;
-    args[1] = &lvl;
-    args[2] = &camoRef;
-    Il2CppObject* exc = NULL;
-    p_runtime_invoke(mApplyCamo, wd, args, &exc);
-}
 
 static void cmd_set_rarity(uint32_t id, int rarity) {
     if (rarity < 0 || rarity > 6) { resp_err(2, "rarity"); return; }
@@ -625,8 +610,10 @@ static void cmd_set_rarity(uint32_t id, int rarity) {
     if (!val) { resp_err(3, "item-not-found"); return; }
     void* wd = *(void**)(val + 0);
     if (!wd || p_object_get_class((Il2CppObject*)wd) != kWeaponData) { resp_err(4, "no-weapon-data"); return; }
+    // 只改物品自身的稀有度（SItemInfo.Rarity）。
+    // 不要写 WeaponData.Rarity：那是全模板共享的运行时字段，
+    // GetLocalizedName() 会读它，写下去会把武器名字改掉。
     *(int*)(val + 40) = rarity;
-    *(int*)((char*)wd + 420) = rarity;
     resp_reset();
     resp_add("OK\n");
 }
@@ -642,10 +629,54 @@ static void cmd_set_camo(uint32_t id, int camoIndex) {
     void* wd = *(void**)(val + 0);
     if (!wd || p_object_get_class((Il2CppObject*)wd) != kWeaponData) { resp_err(4, "no-weapon-data"); return; }
     void* camo = camoIndex >= 0 ? g_camos[camoIndex].ptr : NULL;
+    // 只写物品自身的皮肤字段；WeaponData.Camo 是模板共享字段，写它会让同模板的
+    // 所有物品一起变样（也是名字被 GameLocalizedName 带跑的一部分原因）。
     *(void**)(val + 56) = camo;
-    *(void**)((char*)wd + 456) = camo;
     resp_reset();
     resp_add("OK\n");
+}
+
+// ---------- diagnostics ----------
+static void cmd_dump_class(const char* clsName) {
+    Il2CppImage* img = find_image("Assembly-CSharp.dll");
+    if (!img) { resp_err(1, "no-image"); return; }
+    Il2CppClass* k = p_class_from_name(img, "", clsName);
+    if (!k) { resp_err(4, "no-class"); return; }
+    resp_reset();
+    resp_add("CLASS\t%s\n", clsName);
+    void* iter = NULL;
+    FieldInfo* f;
+    while ((f = p_class_get_fields(k, &iter))) {
+        const char* nm = p_field_get_name(f);
+        resp_add("FIELD\t%s\t%u\n", nm ? nm : "?", (unsigned)p_field_get_offset(f));
+    }
+}
+
+static void cmd_dump_inst(uint32_t id) {
+    void* sd = get_sd();
+    void* items = get_items(sd);
+    if (!sd || !items) { resp_err(1, "not-ready"); return; }
+    char* val = find_item_val(items, id, NULL, NULL);
+    if (!val) { resp_err(3, "item-not-found"); return; }
+    void* wd = *(void**)(val + 0);
+    resp_reset();
+    resp_add("ITEMVAL\t%p\n", (void*)val);
+    resp_add("WD\t%p\n", wd);
+    resp_add("ITEM_RARITY_F40\t%d\n", *(int*)(val + 40));
+    resp_add("ITEM_LEVEL_F36\t%d\n", *(int*)(val + 36));
+    resp_add("ITEM_CAMO_F56\t%p\n", *(void**)(val + 56));
+    if (!wd || p_object_get_class((Il2CppObject*)wd) != kWeaponData) return;
+    void* iter = NULL;
+    FieldInfo* f;
+    while ((f = p_class_get_fields(kWeaponData, &iter))) {
+        int32_t off = p_field_get_offset(f);
+        if (off < 0 || off > 4096) continue;
+        char* base = (char*)wd + off;
+        if (!mem_readable((uintptr_t)base, 8)) continue;
+        void* pv = *(void**)base;
+        resp_add("WF\t%u\t%s\tint=%d\tflt=%.3f\tptr=%p\n",
+                 (unsigned)off, p_field_get_name(f), *(int*)base, *(float*)base, pv);
+    }
 }
 
 static void cmd_save(void) {
@@ -697,6 +728,10 @@ static int serve_client(HANDLE pipe) {
                         else resp_err(2, "bad-args");
                     } else if (strcmp(line, "SAVE") == 0) {
                         cmd_save();
+                    } else if (strncmp(line, "DUMPCLASS ", 10) == 0) {
+                        cmd_dump_class(line + 10);
+                    } else if (strncmp(line, "DUMPWD ", 7) == 0) {
+                        cmd_dump_inst((uint32_t)strtoul(line + 7, NULL, 10));
                     } else if (strcmp(line, "REFRESH") == 0) {
                         resp_reset(); resp_add("OK\n");
                     } else if (strcmp(line, "QUIT") == 0) {
@@ -708,7 +743,9 @@ static int serve_client(HANDLE pipe) {
                         resp_err(2, "unknown");
                     }
                     DWORD wr = 0;
-                    if (g_respLen > 0) WriteFile(pipe, g_resp, (DWORD)g_respLen, &wr, NULL);
+                    if (g_respLen > 0) {
+                        BOOL wok = WriteFile(pipe, g_resp, (DWORD)g_respLen, &wr, NULL);
+                    }
                 }
                 lineLen = 0;
             } else if (lineLen < sizeof(line) - 1) {
