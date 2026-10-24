@@ -23,6 +23,7 @@ typedef struct MethodInfo MethodInfo;
 
 static HMODULE g_ga;
 static Il2CppDomain* g_dom;
+static void* g_initThread;
 static volatile int g_running = 1;
 
 
@@ -30,6 +31,7 @@ static volatile int g_running = 1;
 #define FN(ret, name, args) typedef ret (*fn_##name) args; static fn_##name p_##name;
 FN(Il2CppDomain*, domain_get, (void))
 FN(void*, thread_attach, (Il2CppDomain*))
+FN(void, thread_detach, (void*))
 FN(const Il2CppAssembly**, domain_get_assemblies, (const Il2CppDomain*, size_t*))
 FN(Il2CppImage*, assembly_get_image, (const Il2CppAssembly*))
 FN(const char*, image_get_name, (const Il2CppImage*))
@@ -707,6 +709,9 @@ static int serve_client(HANDLE pipe) {
                 line[lineLen] = 0;
                 while (lineLen > 0 && (line[lineLen - 1] == '\r')) line[--lineLen] = 0;
                 if (lineLen > 0) {
+                    // 每条命令执行前后 attach/detach：空闲时不挂在 IL2CPP 上，
+                    // 否则游戏 shutdown 会在等托管线程，导致退出卡死（未响应）。
+                    void* cmdThread = p_thread_attach ? p_thread_attach(g_dom) : NULL;
                     // dispatch
                     if (strcmp(line, "PING") == 0) {
                         resp_reset(); resp_add("PONG\n");
@@ -736,12 +741,14 @@ static int serve_client(HANDLE pipe) {
                         resp_reset(); resp_add("OK\n");
                     } else if (strcmp(line, "QUIT") == 0) {
                         resp_reset(); resp_add("OK\n");
+                        if (cmdThread && p_thread_detach) { p_thread_detach(cmdThread); cmdThread = NULL; }
                         DWORD wr = 0;
                         WriteFile(pipe, g_resp, (DWORD)g_respLen, &wr, NULL);
                         return 0;
                     } else {
                         resp_err(2, "unknown");
                     }
+                    if (cmdThread && p_thread_detach) { p_thread_detach(cmdThread); cmdThread = NULL; }
                     DWORD wr = 0;
                     if (g_respLen > 0) {
                         BOOL wok = WriteFile(pipe, g_resp, (DWORD)g_respLen, &wr, NULL);
@@ -762,7 +769,7 @@ static DWORD WINAPI agent_thread(LPVOID param) {
     if (!g_ga) return 1;
 
 #define RES(n) *(void**)&p_##n = (void*)GetProcAddress(g_ga, "il2cpp_" #n)
-    RES(domain_get); RES(thread_attach); RES(domain_get_assemblies); RES(assembly_get_image);
+    RES(domain_get); RES(thread_attach); RES(thread_detach); RES(domain_get_assemblies); RES(assembly_get_image);
     RES(image_get_name); RES(class_from_name); RES(class_get_name); RES(class_get_field_from_name);
     RES(field_get_offset); RES(field_static_get_value); RES(field_get_type); RES(class_from_type);
     RES(class_get_element_class); RES(array_element_size); RES(array_length); RES(object_get_class);
@@ -772,7 +779,7 @@ static DWORD WINAPI agent_thread(LPVOID param) {
     if (!p_domain_get || !p_runtime_invoke) return 1;
 
     g_dom = p_domain_get();
-    p_thread_attach(g_dom);
+    g_initThread = p_thread_attach(g_dom);
 
     Il2CppImage* img = find_image("Assembly-CSharp.dll");
     Il2CppImage* cimg = find_image("UnityEngine.CoreModule.dll");
@@ -801,6 +808,7 @@ static DWORD WINAPI agent_thread(LPVOID param) {
     loc_load();
     scan_mods();
     scan_camos();
+    if (p_thread_detach && g_initThread) { p_thread_detach(g_initThread); g_initThread = NULL; }
 
     g_resp = (char*)malloc(BUF_CAP);
     if (!g_resp) return 1;
@@ -826,6 +834,8 @@ BOOL APIENTRY DllMain(HMODULE h, DWORD reason, LPVOID lp) {
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(h);
         CreateThread(NULL, 0, agent_thread, NULL, 0, NULL);
+    } else if (reason == DLL_PROCESS_DETACH) {
+        g_running = 0;
     }
     return TRUE;
 }
