@@ -4,6 +4,25 @@
 
 > 基于 **Deepseek-v4.1-flash1017** 制作。
 
+---
+
+## ⬇️ 直接下载（不需要会用 GitHub）
+
+**👉 [点这里下载 SFHTrainer.exe](https://github.com/Suedonmalus/StrikeForceHeroes-SaveEditor/raw/main/dist/SFHTrainer.exe)**
+
+- 只需要这**一个文件**（418 KB），不用装 Git、不用注册账号、不用 clone；
+- 下载后双击就能用，不用安装；
+- 唯一要求：**Windows 10 / 11 64 位** + [.NET 8 桌面运行时（x64）](https://aka.ms/dotnet/8.0/windowsdesktop-runtime-win-x64.exe)（没装过的话第一次打开会提示，按提示装上即可）。
+
+其他下载方式：
+
+| 方式 | 操作 |
+| --- | --- |
+| 网页点选 | 仓库首页 → `dist` 文件夹 → `SFHTrainer.exe` → 右上角 **Download raw file**（下载图标） |
+| 打包下载 | 仓库首页 → 绿色 **Code** 按钮 → **Download ZIP**（会连源码一起下载，约 1 MB） |
+
+---
+
 - **绿色单文件**：只有一个 `SFHTrainer.exe`，注入代理已内嵌，复制到哪都能运行，不需要安装。
 - **只改你自己的单机存档**：不联网、不改游戏文件。
 - 联机对局使用有封号风险，请只在单机模式用。
