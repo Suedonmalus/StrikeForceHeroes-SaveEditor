@@ -1031,12 +1031,16 @@ public sealed class MainForm : Form
             return;
         }
 
+        // 先把下拉里的选择取下来：SetBusy 会触发 RefreshUi → BindModEditor，
+        // 那里会把「武器稀有度 / 皮肤」下拉重置成存档里的旧值，
+        // 如果等到 SetBusy 之后再读，读到的永远是旧值（皮肤会"弹回"原选项）。
+        var weaponRarity = _cmbWeaponRarity.SelectedItem is RarityChoice wr ? wr.Index : item.Rarity;
+        var camoIndex = _cmbCamo.SelectedItem is CamoChoice cc ? cc.Index : item.CamoIndex;
+
         SetBusy(true, "正在写入词条…");
         try
         {
             AppendLog($"正在为「{DisplayNames.ItemName(item)}」（ID {item.Id}）写入 {slots.Count} 个槽位…", LogKind.Info);
-            var weaponRarity = _cmbWeaponRarity.SelectedItem is RarityChoice wr ? wr.Index : item.Rarity;
-            var camoIndex = _cmbCamo.SelectedItem is CamoChoice cc ? cc.Index : item.CamoIndex;
             await _ctl.SetRarityAsync(item.Id, weaponRarity);
             await _ctl.SetCamoAsync(item.Id, camoIndex);
             await _ctl.ApplyModsAsync(item.Id, slots);
