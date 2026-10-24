@@ -1016,6 +1016,15 @@ public sealed class MainForm : Form
             AppendLog($"「{DisplayNames.ItemName(item)}」没有武器数据（type=-1），不能设置词条。", LogKind.Warn);
             return;
         }
+        if (item.Slots.Count == 0)
+        {
+            // 游戏里这种武器是「无词条」状态（WeaponMods 是空数组）。
+            // 手工造槽位虽然能写进内存，但游戏一保存就会崩溃（已实测），所以直接拦住。
+            AppendLog($"「{DisplayNames.ItemName(item)}」在游戏里是「无词条」武器，没有词条槽位，修改器不能给它添加——"
+                      + "强行添加会导致游戏保存时崩溃。请先在游戏内给这件武器洗出词条（或用有词条的武器）再来改。",
+                LogKind.Warn);
+            return;
+        }
 
         var slots = new List<ModSlot>(4);
         for (var i = 0; i < 4; i++)

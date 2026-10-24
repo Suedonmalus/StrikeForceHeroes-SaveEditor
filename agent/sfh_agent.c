@@ -40,6 +40,8 @@ FN(const char*, class_get_name, (Il2CppClass*))
 FN(FieldInfo*, class_get_field_from_name, (Il2CppClass*, const char*))
 FN(FieldInfo*, class_get_fields, (Il2CppClass*, void**))
 FN(const char*, field_get_name, (FieldInfo*))
+FN(const MethodInfo*, class_get_methods, (Il2CppClass*, void**))
+FN(const char*, method_get_name, (const MethodInfo*))
 FN(int32_t, field_get_offset, (FieldInfo*))
 FN(void, field_static_get_value, (FieldInfo*, void*))
 FN(const Il2CppType*, field_get_type, (FieldInfo*))
@@ -573,15 +575,13 @@ static void cmd_set_mod(uint32_t id, int slot, int modIndex, int rarity) {
     void* wd = *(void**)(val + 0);
     if (!wd || p_object_get_class((Il2CppObject*)wd) != kWeaponData) { resp_err(4, "no-weapon-data"); return; }
     void* modsArr = *(void**)(val + 48);
-    if (!modsArr) {
-        if (!kSModInfoElem) { resp_err(6, "no-element-class"); return; }
-        modsArr = (void*)p_array_new(kSModInfoElem, 4);
-        if (!modsArr) { resp_err(6, "array-new-failed"); return; }
-        *(void**)(val + 48) = modsArr;
-    }
-    int len = p_array_length((Il2CppObject*)modsArr);
+    int len = modsArr ? p_array_length((Il2CppObject*)modsArr) : 0;
+    // 注意：不要手工 p_array_new 给「没有词条的武器」造数组。
+    // 实测这样能写进内存，但游戏一旦 Save 就会崩（序列化这个数组时炸）。
+    // 没有词条槽位时直接报错，由 GUI 提示玩家在游戏内先取得词条。
+    if (slot >= len) { resp_err(7, "no-mod-slot"); return; }
     int msz = p_array_element_size(p_object_get_class((Il2CppObject*)modsArr));
-    if (slot >= len) { resp_err(6, "slot-out-of-range"); return; }
+    if (msz <= 0) { resp_err(6, "bad-element-size"); return; }
     char* m = (char*)modsArr + 32 + slot * msz;
     *(void**)m = g_mods[modIndex].ptr;
     *(int*)(m + 8) = rarity;
@@ -651,6 +651,21 @@ static void cmd_dump_class(const char* clsName) {
     while ((f = p_class_get_fields(k, &iter))) {
         const char* nm = p_field_get_name(f);
         resp_add("FIELD\t%s\t%u\n", nm ? nm : "?", (unsigned)p_field_get_offset(f));
+    }
+}
+
+static void cmd_dump_methods(const char* clsName) {
+    Il2CppImage* img = find_image("Assembly-CSharp.dll");
+    if (!img) { resp_err(1, "no-image"); return; }
+    Il2CppClass* k = p_class_from_name(img, "", clsName);
+    if (!k) { resp_err(4, "no-class"); return; }
+    resp_reset();
+    resp_add("CLASS\t%s\n", clsName);
+    void* iter = NULL;
+    const MethodInfo* m;
+    while ((m = p_class_get_methods(k, &iter))) {
+        const char* nm = p_method_get_name(m);
+        resp_add("METHOD\t%s\n", nm ? nm : "?");
     }
 }
 
@@ -735,6 +750,8 @@ static int serve_client(HANDLE pipe) {
                         cmd_save();
                     } else if (strncmp(line, "DUMPCLASS ", 10) == 0) {
                         cmd_dump_class(line + 10);
+                    } else if (strncmp(line, "DUMPMETHODS ", 12) == 0) {
+                        cmd_dump_methods(line + 12);
                     } else if (strncmp(line, "DUMPWD ", 7) == 0) {
                         cmd_dump_inst((uint32_t)strtoul(line + 7, NULL, 10));
                     } else if (strcmp(line, "REFRESH") == 0) {
@@ -774,7 +791,7 @@ static DWORD WINAPI agent_thread(LPVOID param) {
     RES(field_get_offset); RES(field_static_get_value); RES(field_get_type); RES(class_from_type);
     RES(class_get_element_class); RES(array_element_size); RES(array_length); RES(object_get_class);
     RES(class_get_method_from_name); RES(runtime_invoke); RES(array_new); RES(gc_foreach_heap); RES(string_new);
-    RES(class_get_fields); RES(field_get_name);
+    RES(class_get_fields); RES(field_get_name); RES(class_get_methods); RES(method_get_name);
 #undef RES
     if (!p_domain_get || !p_runtime_invoke) return 1;
 
