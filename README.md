@@ -14,7 +14,7 @@
 
 | 文件 | 作用 |
 | --- | --- |
-| `dist/SFHTrainer.exe` | 修改器主程序（.NET 8 WinForms，单文件，内含注入代理） |
+| [`dist/SFHTrainer.exe`](dist/SFHTrainer.exe) | 修改器主程序（.NET 8 WinForms，单文件，内含注入代理） |
 
 源码（可选，想自己重新构建时用）：
 
