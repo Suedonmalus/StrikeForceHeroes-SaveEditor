@@ -1364,7 +1364,8 @@ public sealed class MainForm : Form
 
     void RebuildModChoices(GameState? state)
     {
-        var mods = state?.Mods ?? new List<ModDef>();
+        // 下拉顺序：最常用的六个词条排最前（伤害/射速/精度/射程/弹匣/备弹）。
+        var mods = DisplayNames.SortMods(state?.Mods ?? new List<ModDef>());
         for (var i = 0; i < 4; i++)
         {
             var modCombo = _cboMod[i];
@@ -1448,7 +1449,8 @@ public sealed class MainForm : Form
         _cmbCamo.BeginUpdate();
         _cmbCamo.Items.Clear();
         _cmbCamo.Items.Add(new CamoChoice(-1, "无皮肤"));
-        foreach (var camo in state?.Camos ?? new List<CamoDef>())
+        // 皮肤顺序：稀有度从高到低（传说在上、普通在下）。
+        foreach (var camo in DisplayNames.SortCamos(state?.Camos ?? new List<CamoDef>()))
             _cmbCamo.Items.Add(new CamoChoice(camo.Index, $"{camo.Name}（{DisplayNames.RarityName(state, camo.Rarity)}）"));
         _cmbCamo.EndUpdate();
         if (camoWas >= 0) SelectCamoCombo(camoWas);

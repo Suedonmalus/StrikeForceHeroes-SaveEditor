@@ -88,6 +88,54 @@ public static class DisplayNames
     public static string? ModChineseHint(string name)
         => ModChineseHints.TryGetValue(name, out var zh) ? zh : null;
 
+    /// <summary>
+    /// 词条下拉的推荐顺序：最常用的六个排在最前面
+    /// （伤害 / 射速 / 精度 / 射程 / 弹匣容量 / 备弹），其余按协议里的原始顺序。
+    /// 只影响下拉显示顺序，回传给代理的仍然是协议里的 Index。
+    /// </summary>
+    static readonly string[] PreferredModOrder =
+    {
+        "Damage", "Rate", "Aim", "Range", "AmmoClip", "AmmoSpare",
+    };
+
+    static int PreferredModRank(string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return int.MaxValue / 2;
+        for (var i = 0; i < PreferredModOrder.Length; i++)
+            if (string.Equals(PreferredModOrder[i], name, StringComparison.OrdinalIgnoreCase))
+                return i;
+        return PreferredModOrder.Length;
+    }
+
+    /// <summary>按「常用优先」重排词条列表。</summary>
+    public static List<ModDef> SortMods(IEnumerable<ModDef> mods)
+    {
+        var list = mods.ToList();
+        list.Sort((a, b) =>
+        {
+            var ra = PreferredModRank(a.Name);
+            var rb = PreferredModRank(b.Name);
+            if (ra != rb) return ra.CompareTo(rb);
+            return a.Index.CompareTo(b.Index);
+        });
+        return list;
+    }
+
+    /// <summary>
+    /// 皮肤下拉的顺序：稀有度从高到低（传说在最上、普通在最下），
+    /// 同一稀有度内保持协议里的原始序号。
+    /// </summary>
+    public static List<CamoDef> SortCamos(IEnumerable<CamoDef> camos)
+    {
+        var list = camos.ToList();
+        list.Sort((a, b) =>
+        {
+            if (a.Rarity != b.Rarity) return b.Rarity.CompareTo(a.Rarity);
+            return a.Index.CompareTo(b.Index);
+        });
+        return list;
+    }
+
     static bool HasCjk(string text)
     {
         foreach (var ch in text)
